@@ -21,6 +21,14 @@ from telegram.ext import Application, ApplicationBuilder, CommandHandler, Contex
 import config
 import monitor
 
+# Server consoles are cp1252/cp866; never let Cyrillic in logs kill stdout
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+if sys.version_info < (3, 11):
+    print(f"Error: Python 3.11+ required, found {sys.version.split()[0]}")
+    sys.exit(1)
+
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
@@ -300,7 +308,7 @@ def main():
         len(config.WATCHES),
         config.CHECK_INTERVAL_SECONDS,
     )
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
