@@ -51,7 +51,9 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO,
     handlers=[
-        logging.StreamHandler(),
+        # stdout, not stderr: the launcher tees output through PowerShell 5.1,
+        # which wraps every stderr line in a scary NativeCommandError record
+        logging.StreamHandler(sys.stdout),
         logging.handlers.RotatingFileHandler(
             LOGS_DIR / "warmship.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8"
         ),
