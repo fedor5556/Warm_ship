@@ -119,14 +119,18 @@ def _state() -> dict:
 
 # ---------- messaging ----------
 
-async def _send_all(app: Application, text: str, silent: bool = False):
+async def _send_all(app: Application, text: str, silent: bool = False) -> int:
+    """Returns how many chats actually received the message."""
+    delivered = 0
     for chat_id in list(_subscribers()):
         try:
             await app.bot.send_message(
                 chat_id=int(chat_id), text=text, disable_notification=silent
             )
+            delivered += 1
         except Exception as e:  # noqa: BLE001 - one bad chat must not stop the rest
             log.warning("Failed to send to %s: %s", chat_id, e)
+    return delivered
 
 
 async def _notify_admin(app: Application, text: str):
@@ -172,11 +176,17 @@ async def monitor_job(context: ContextTypes.DEFAULT_TYPE):
 
                 if prev_avail == 0 and cur["available"] > 0:
                     log.info("TICKETS APPEARED for %s: %s", watch["key"], cur)
-                    await _send_all(
+                    delivered = await _send_all(
                         app,
                         "🚨🚨 БИЛЕТЫ ПОЯВИЛИСЬ! 🚨🚨\n\n"
                         f"{text}\n\nПокупать здесь: {config.SITE_URL}",
                     )
+                    if delivered == 0:
+                        # Nobody got the alert (Telegram down / no subscribers):
+                        # keep the old snapshot so this 0->N transition fires
+                        # again next cycle instead of being swallowed.
+                        log.warning("Alert reached no one - retrying next cycle")
+                        continue
                     rstate["last_alert"] = now
                 elif prev_avail > 0 and cur["available"] == 0:
                     log.info("Tickets gone for %s", watch["key"])
