@@ -8,6 +8,7 @@ import json
 import logging
 import logging.handlers
 import os
+import socket
 import sys
 import time
 from datetime import datetime
@@ -307,7 +308,24 @@ def _crash_notify(error: str):
         pass
 
 
+# Holds the single-instance lock socket for the process lifetime (see main).
+_SINGLE_INSTANCE_LOCK = None
+
+
 def main():
+    # One token = one poller. A second instance would steal getUpdates and both
+    # would go deaf on a silent HTTP 409. Bind a localhost port for the process
+    # lifetime; if it's taken, another copy is live - bail out. The OS releases
+    # the port automatically when this process dies (no lock file to clean).
+    # Fleet port map: 47615 bus ETA, 47631 Admin_hub runner, 47617 this bot.
+    global _SINGLE_INSTANCE_LOCK
+    _SINGLE_INSTANCE_LOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        _SINGLE_INSTANCE_LOCK.bind(("127.0.0.1", 47617))
+    except OSError:
+        log.error("Another Warm Ship instance is already running (single-instance guard). Exiting.")
+        return
+
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("status", cmd_status))

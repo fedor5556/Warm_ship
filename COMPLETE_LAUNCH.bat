@@ -19,6 +19,15 @@ set "PYTHON_CMD=%~dp0venv\Scripts\python.exe"
 "%PYTHON_CMD%" -m pip install -r requirements.txt || (echo [FATAL] pip failed & pause & exit /b 1)
 
 if not exist logs mkdir logs
+if exist logs\runner.stop del logs\runner.stop
+
+:: If the central runner (Admin_hub\runner.py) is alive, hand off to it: it
+:: starts bot.py hidden, keeps it alive after crashes, and brings it back
+:: after a reboot. Otherwise fall back to the legacy visible-window launch.
+powershell -NoProfile -Command "$r = Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'runner\.py' }; if ($r) { exit 0 } else { exit 1 }"
+if %ERRORLEVEL%==0 goto :runner
+
+echo [WARN] Central runner not detected - legacy visible-window launch.
 
 :: Kill an already-running instance of THIS bot only: folder-path AND script
 :: name must both match; admin_bot is exempt. One token = one poller.
@@ -32,3 +41,11 @@ powershell -NoProfile -Command "& '%PYTHON_CMD%' -u bot.py 2>&1 | Tee-Object -Fi
 echo.
 echo [EXIT] Warm Ship stopped. Read any error above, then press a key to close.
 pause >nul
+exit /b 0
+
+:runner
+echo [INFO] Central runner detected - requesting hidden (re)start.
+echo start > logs\runner.start
+:: plain "exit" (not /b): the Hub starts this bat via `start`, which keeps the
+:: console open after the script ends - exit closes the window too.
+exit 0
